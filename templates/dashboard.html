@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Auraflow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Hello, {{ g.user.name }}</h1>
+  <p class="muted">You are signed in as <strong>{{ role_label }}</strong>.</p>
+
+  {% if g.user.role == "employee" %}
+    <p>Soon: chat with the Auraflow assistant and track your tickets here.</p>
+  {% elif g.user.role == "l1" %}
+    <p>Soon: your L1 queue of assigned tickets will appear here.</p>
+  {% elif g.user.role == "l2" %}
+    <p>Soon: your L2 queue and escalated tickets will appear here.</p>
+  {% elif g.user.role == "admin" %}
+    <p>Soon: charts, SLA overview, user management and the knowledge-base editor will appear here.</p>
+  {% endif %}
+</div>
+{% endblock %}
