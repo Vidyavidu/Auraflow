@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Assistant - Auraflow{% endblock %}
+{% block content %}
+<style>
+  .chat h1 { margin-bottom: 4px; }
+  .log { height: 460px; overflow-y: auto; padding: 14px; margin: 16px 0;
+         background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+         display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; flex-direction: column; max-width: 85%; }
+  .row.user { align-self: flex-end; align-items: flex-end; }
+  .row.bot { align-self: flex-start; align-items: flex-start; }
+  .bubble { padding: 10px 14px; border-radius: 14px; white-space: pre-wrap;
+            word-wrap: break-word; font-size: .97rem; }
+  .row.user .bubble { background: var(--brand); color: var(--brand-text); border-bottom-right-radius: 4px; }
+  .row.bot .bubble { background: var(--card); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .solution { margin-top: 8px; padding: 12px 14px; border-radius: 10px; white-space: pre-wrap;
+              background: var(--info-bg); color: var(--info-text); font-size: .95rem; }
+  .solution .meta { display: block; font-size: .78rem; opacity: .8; margin-bottom: 6px; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .chip { background: transparent; color: var(--text); border: 1px solid var(--accent);
+          border-radius: 999px; padding: 6px 12px; font-size: .88rem; font-weight: 500; }
+  .chip:hover { background: var(--accent); color: #171F22; filter: none; }
+  .chip[disabled] { opacity: .5; cursor: default; }
+  .composer { display: flex; gap: 10px; }
+  .composer input { flex: 1; }
+  .typing { font-style: italic; color: var(--muted); font-size: .9rem; }
+</style>
+
+<div class="card chat">
+  <h1>Auraflow assistant</h1>
+  <p class="muted">Describe your IT problem in your own words and I will look for a fix.</p>
+
+  <div id="log" class="log" aria-live="polite"></div>
+
+  <form id="form" class="composer" autocomplete="off">
+    <input id="msg" type="text" maxlength="500" placeholder="e.g. my VPN is not connecting" required>
+    <button id="send" type="submit">Send</button>
+  </form>
+</div>
+
+<script>
+  const log = document.getElementById("log");
+  const form = document.getElementById("form");
+  const input = document.getElementById("msg");
+  const sendBtn = document.getElementById("send");
+
+  function scrollDown() { log.scrollTop = log.scrollHeight; }
+
+  function addRow(who) {
+    const row = document.createElement("div");
+    row.className = "row " + who;
+    log.appendChild(row);
+    return row;
+  }
+
+  function addBubble(who, text) {
+    const row = addRow(who);
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    scrollDown();
+    return row;
+  }
+
+  function addChips(row, items, onClick) {
+    const wrap = document.createElement("div");
+    wrap.className = "chips";
+    items.forEach(function (item) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = item.label;
+      chip.addEventListener("click", function () {
+        wrap.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+        onClick(item);
+      });
+      wrap.appendChild(chip);
+    });
+    row.appendChild(wrap);
+  }
+
+  function renderBot(data) {
+    const row = addBubble("bot", data.reply);
+
+    if (data.article) {
+      const box = document.createElement("div");
+      box.className = "solution";
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = data.article.category + " \u00b7 match " + data.confidence + "%";
+      box.appendChild(meta);
+      box.appendChild(document.createTextNode(data.article.solution));
+      row.appendChild(box);
+
+      addChips(row, [
+        { label: "\u2705 That fixed it", value: "yes" },
+        { label: "\u274c Still not working", value: "no" }
+      ], function (item) {
+        if (item.value === "yes") {
+          addBubble("bot", "Glad that helped! Message me if anything else comes up.");
+        } else {
+          addBubble("bot", "Sorry about that. Raising a ticket straight from this chat is coming in the next step.");
+        }
+      });
+    }
+
+    if (data.suggestions && data.suggestions.length) {
+      addChips(row, data.suggestions.map(function (s) {
+        return { label: s.title };
+      }), function (item) { send(item.label); });
+    }
+    scrollDown();
+  }
+
+  async function send(text) {
+    addBubble("user", text);
+    sendBtn.disabled = true;
+    const typing = addBubble("bot", "Auraflow is typing\u2026");
+    typing.firstChild.classList.add("typing");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text })
+      });
+      const data = await res.json();
+      typing.remove();
+      if (!res.ok) {
+        addBubble("bot", data.error || "Something went wrong. Please try again.");
+      } else {
+        renderBot(data);
+      }
+    } catch (err) {
+      typing.remove();
+      addBubble("bot", "I could not reach the server. Your session may have expired, so please refresh and sign in again.");
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) { return; }
+    input.value = "";
+    send(text);
+  });
+
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/chat/history");
+      const data = await res.json();
+      if (data.messages && data.messages.length) {
+        data.messages.forEach(function (m) { addBubble(m.sender === "user" ? "user" : "bot", m.message); });
+        return;
+      }
+    } catch (err) { /* fall through to welcome message */ }
+    addBubble("bot", "Hi! I'm the Auraflow assistant. What's going wrong with your IT today?");
+  }
+
+  loadHistory();
+  input.focus();
+</script>
+{% endblock %}

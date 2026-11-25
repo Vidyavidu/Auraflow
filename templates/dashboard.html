@@ -5,8 +5,10 @@
   <h1>Hello, {{ g.user.name }}</h1>
   <p class="muted">You are signed in as <strong>{{ role_label }}</strong>.</p>
 
+  <p><a class="btn" href="{{ url_for('chat.chat_page') }}">Open the assistant</a></p>
+
   {% if g.user.role == "employee" %}
-    <p>Soon: chat with the Auraflow assistant and track your tickets here.</p>
+    <p>Soon: track your tickets here.</p>
   {% elif g.user.role == "l1" %}
     <p>Soon: your L1 queue of assigned tickets will appear here.</p>
   {% elif g.user.role == "l2" %}
