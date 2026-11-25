@@ -1,8 +1,8 @@
 from flask import Flask, jsonify, render_template
+from sqlalchemy import text
 
 from config import Config
 from extensions import db
-from models import HealthCheck
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -22,24 +22,13 @@ def health():
 
 @app.route("/db-test")
 def db_test():
-    """Temporary route: writes one row to the database and reads it back."""
+    """Temporary route: checks that the app can reach Neon."""
     try:
-        db.create_all()
-
-        row = HealthCheck(note="Hello from Auraflow")
-        db.session.add(row)
-        db.session.commit()
-
-        total = HealthCheck.query.count()
-        latest = HealthCheck.query.order_by(HealthCheck.id.desc()).first()
-
-        engine_name = db.engine.dialect.name
-
+        db.session.execute(text("SELECT 1"))
         return jsonify(
             status="ok",
-            database=engine_name,
-            rows_saved=total,
-            latest_note=latest.note,
+            database=db.engine.dialect.name,
+            message="Connected to Neon",
         )
     except Exception as error:
         db.session.rollback()

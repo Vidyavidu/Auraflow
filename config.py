@@ -11,8 +11,11 @@ def get_database_uri():
     uri = os.environ.get("DATABASE_URL", "").strip()
 
     if not uri:
-        # Local fallback so the app still runs without Neon
-        return "sqlite:///auraflow.db"
+        raise RuntimeError(
+            "DATABASE_URL is not set. Locally, add it to your .env file. "
+            "On Vercel, add it under Settings > Environment Variables "
+            "(Production) and redeploy."
+        )
 
     # Some providers give "postgres://", SQLAlchemy needs "postgresql://"
     if uri.startswith("postgres://"):
