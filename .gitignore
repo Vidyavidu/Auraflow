@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Secrets and databases (never commit these)
+.env
+*.db
+*.sqlite3
+instance/
+
+# Editor and system files
+.vscode/
+.DS_Store
+
+# Vercel
+.vercel/
