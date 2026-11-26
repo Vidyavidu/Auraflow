@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Knowledge base - Auraflow{% endblock %}
+{% block content %}
+{% include "_ticket_styles.html" %}
+<style>
+  .inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .inline button { padding: 6px 12px; font-size: .88rem; }
+  .tester { background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+            padding: 14px 16px; margin-bottom: 22px; }
+  .tester form { display: flex; gap: 10px; margin-top: 8px; }
+  .tester form input { flex: 1; }
+  .tester ul { margin: 10px 0 0; padding-left: 20px; }
+  .tester li { margin: 4px 0; }
+  .small-btn { padding: 6px 12px; font-size: .88rem; }
+</style>
+<div class="card">
+  <div class="topbar">
+    <h1>Knowledge base</h1>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('kb.article_new') }}">Add article</a>
+      <a class="btn" href="{{ url_for('admin.analytics') }}">Analytics</a>
+      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="tester">
+    <strong>Test the chatbot</strong>
+    <span class="muted"> - type a sample message and see which article it would match.</span>
+    <form method="get" action="{{ url_for('kb.article_list') }}">
+      <input name="q" type="text" maxlength="500" value="{{ q }}" placeholder="e.g. my vpn keeps disconnecting">
+      <button type="submit">Test</button>
+    </form>
+    {% if test %}
+      {% if test.smalltalk %}
+        <p class="muted">The chatbot would treat this as small talk ({{ test.smalltalk }}) and not look for an article.</p>
+      {% elif test.results %}
+        <ul>
+          {% for r in test.results %}
+          <li>
+            <strong>{{ r.title }}</strong> - {{ r.confidence }}%
+            {% if loop.first and r.passes %}<span class="pill met">Would be shown</span>
+            {% elif loop.first %}<span class="pill at_risk">Below {{ test.threshold }}% - bot would ask for more detail</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No published articles to match against.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="scroll-x">
+    <table class="tickets">
+      <thead>
+        <tr>
+          <th>Title</th><th>Category</th><th>Default urgency</th><th>Status</th>
+          <th>Used by</th><th>Updated</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a, ticket_count, chat_count in rows %}
+        <tr>
+          <td><a href="{{ url_for('kb.article_edit', article_id=a.id) }}">{{ a.title }}</a></td>
+          <td>{{ a.category }}</td>
+          <td><span class="pill {{ a.default_urgency }}">{{ a.default_urgency | upper }}</span></td>
+          <td>
+            {% if a.is_published %}<span class="pill on_track">Published</span>
+            {% else %}<span class="pill">Hidden</span>{% endif %}
+          </td>
+          <td>{{ ticket_count }} ticket(s), {{ chat_count }} chat(s)</td>
+          <td>{{ a.updated_at | local_time }}</td>
+          <td>
+            <div class="inline">
+              <a class="btn small-btn" href="{{ url_for('kb.article_edit', article_id=a.id) }}">Edit</a>
+              <form method="post" action="{{ url_for('kb.article_toggle', article_id=a.id) }}">
+                <button class="ghost small-btn" type="submit"
+                        style="color: var(--text); border-color: var(--muted);">
+                  {{ "Unpublish" if a.is_published else "Publish" }}
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('kb.article_delete', article_id=a.id) }}"
+                    onsubmit="return confirm('Delete this article permanently?');">
+                <button class="ghost small-btn" type="submit"
+                        style="color: var(--error-text); border-color: var(--error-text);">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="muted">No articles yet. Click "Add article".</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

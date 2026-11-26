@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ "Add article" if is_new else "Edit article" }} - Auraflow{% endblock %}
+{% block content %}
+{% include "_ticket_styles.html" %}
+<style>
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-weight: 600; }
+  .check input { width: auto; }
+  .hint { color: var(--muted); font-size: .85rem; margin: 4px 0 0; }
+</style>
+<div class="card narrow" style="max-width: 720px;">
+  <h1>{{ "Add article" if is_new else "Edit article" }}</h1>
+
+  <form method="post"
+        action="{{ url_for('kb.article_new') if is_new else url_for('kb.article_edit', article_id=article.id) }}">
+
+    <label for="title">Title</label>
+    <input id="title" name="title" type="text" maxlength="200" value="{{ form.title }}" required autofocus>
+
+    <label for="category">Category</label>
+    <input id="category" name="category" type="text" maxlength="80" list="category-list"
+           value="{{ form.category }}" required>
+    <datalist id="category-list">
+      {% for c in categories %}<option value="{{ c }}">{% endfor %}
+    </datalist>
+    <p class="hint">Pick an existing category or type a new one. It also appears in the ticket form.</p>
+
+    <label for="keywords">Keywords</label>
+    <textarea id="keywords" name="keywords" style="min-height: 90px;" required>{{ form.keywords }}</textarea>
+    <p class="hint">Separate with commas. Include words employees really use, and multi-word phrases like "blue screen". These matter most for matching.</p>
+
+    <label for="solution">Solution (steps shown to the employee)</label>
+    <textarea id="solution" name="solution" maxlength="5000" style="min-height: 190px;" required>{{ form.solution }}</textarea>
+    <p class="hint">Put each step on its own line, for example "1. Restart your laptop."</p>
+
+    <label for="default_urgency">Default urgency if a ticket is raised</label>
+    <select id="default_urgency" name="default_urgency">
+      {% for u in urgencies %}
+      <option value="{{ u }}" {% if u == form.default_urgency %}selected{% endif %}>{{ u | title }}</option>
+      {% endfor %}
+    </select>
+
+    <label class="check">
+      <input type="checkbox" name="is_published" {% if form.is_published %}checked{% endif %}>
+      Published (visible to the chatbot)
+    </label>
+
+    <button class="full" type="submit">{{ "Create article" if is_new else "Save changes" }}</button>
+  </form>
+  <p class="small muted"><a href="{{ url_for('kb.article_list') }}">Back to knowledge base</a></p>
+</div>
+{% endblock %}

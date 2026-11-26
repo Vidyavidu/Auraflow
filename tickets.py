@@ -24,22 +24,57 @@ import urgency
 tickets_bp = Blueprint("tickets", __name__)
 
 OPEN_STATES = ("open", "in_progress", "escalated")
+DONE_STATES = ("resolved", "closed")
 MAX_TITLE = 200
 MAX_DESCRIPTION = 2000
 
 
-def pick_l1_technician():
-    """Active L1 technician with the fewest open tickets (ties: lowest id)."""
+# ---------- assignment ----------
+def pick_technician(role, category=None):
+    """
+    Returns (technician, how). how is "specialist", "generalist" or "fallback".
+    1. Specialists for the category, 2. generalists (no specialties),
+    3. anyone of that role. Inside a group: fewest open tickets, then lowest id.
+    """
+    techs = (
+        User.query.filter(User.role == role, User.is_active.is_(True))
+        .order_by(User.id)
+        .all()
+    )
+    if not techs:
+        return None, None
+
+    open_counts = dict(
+        db.session.query(Ticket.assignee_id, func.count(Ticket.id))
+        .filter(Ticket.status.in_(OPEN_STATES), Ticket.assignee_id.isnot(None))
+        .group_by(Ticket.assignee_id)
+        .all()
+    )
+
+    how = "specialist"
+    pool = [t for t in techs if t.handles(category)]
+    if not pool:
+        how = "generalist"
+        pool = [t for t in techs if not t.specialty_list()]
+    if not pool:
+        how = "fallback"
+        pool = techs
+
+    best = min(pool, key=lambda t: (open_counts.get(t.id, 0), t.id))
+    return best, how
+
+
+def describe_pick(tech, how, level_name, category):
+    base = f"Auto-assigned to {tech.name} ({level_name})"
+    if how == "specialist":
+        return f"{base}, specialist in {category}."
+    if how == "generalist":
+        if category == "General":
+            return f"{base}, generalist."
+        return f"{base}. No {category} specialist is available, so a generalist was chosen."
     return (
-        db.session.query(User)
-        .outerjoin(
-            Ticket,
-            (Ticket.assignee_id == User.id) & Ticket.status.in_(OPEN_STATES),
-        )
-        .filter(User.role == "l1", User.is_active.is_(True))
-        .group_by(User.id)
-        .order_by(func.count(Ticket.id).asc(), User.id.asc())
-        .first()
+        f"{base}. No {category} specialist or generalist is available, "
+        "so the least busy technician was chosen."
     )
 
 
@@ -76,7 +111,7 @@ def create_ticket(requester, title, description, category="General",
         created_at=now,
     )
 
-    assignee = pick_l1_technician()
+    assignee, how = pick_technician("l1", category)
     if assignee:
         ticket.assignee_id = assignee.id
 
@@ -94,7 +129,7 @@ def create_ticket(requester, title, description, category="General",
     )
 
     if assignee:
-        assign_note = f"Auto-assigned to {assignee.name} (L1)."
+        assign_note = describe_pick(assignee, how, "L1", category)
     else:
         assign_note = "No L1 technician is available. Ticket is waiting in the unassigned queue."
     ticket.updates.append(TicketUpdate(author_id=None, kind="assigned", note=assign_note))
@@ -103,6 +138,7 @@ def create_ticket(requester, title, description, category="General",
     return ticket, True
 
 
+# ---------- access ----------
 def can_view(ticket):
     user = g.user
     if user.role in ("admin", "l2"):
@@ -110,16 +146,40 @@ def can_view(ticket):
     return user.id in (ticket.requester_id, ticket.assignee_id)
 
 
-def _categories():
-    rows = (
-        db.session.query(Article.category)
-        .filter(Article.is_published.is_(True))
-        .distinct()
-        .all()
-    )
-    names = {r[0] for r in rows}
+def scoped_query():
+    """Tickets the current user is allowed to see."""
+    query = Ticket.query
+    if g.user.role not in ("l2", "admin"):
+        query = query.filter(
+            or_(Ticket.requester_id == g.user.id, Ticket.assignee_id == g.user.id)
+        )
+    return query
+
+
+def category_names(published_only=True, include_general=True):
+    query = db.session.query(Article.category).distinct()
+    if published_only:
+        query = query.filter(Article.is_published.is_(True))
+    names = {r[0] for r in query.all()}
     names.discard("General")
-    return sorted(names) + ["General"]
+    names = sorted(names)
+    return names + ["General"] if include_general else names
+
+
+def sla_percent(ticket):
+    """How much of the SLA window has been used (0 to 100)."""
+    if ticket.sla_due_at is None or ticket.created_at is None:
+        return 0
+    start = sla._aware(ticket.created_at)
+    due = sla._aware(ticket.sla_due_at)
+    if ticket.status in DONE_STATES and ticket.resolved_at:
+        end = sla._aware(ticket.resolved_at)
+    else:
+        end = utcnow()
+    total = (due - start).total_seconds()
+    if total <= 0:
+        return 100
+    return max(0, min(100, round((end - start).total_seconds() / total * 100)))
 
 
 # ---------- Chat uses this endpoint ----------
@@ -191,27 +251,45 @@ def api_create_ticket():
 @tickets_bp.route("/tickets")
 @login_required
 def ticket_list():
-    query = Ticket.query.options(
+    view = request.args.get("view", "all")
+    if view not in ("all", "open", "done"):
+        view = "all"
+    q = request.args.get("q", "").strip()[:100]
+
+    total = scoped_query().count()
+    open_n = scoped_query().filter(Ticket.status.in_(OPEN_STATES)).count()
+    counts = {"all": total, "open": open_n, "done": total - open_n}
+
+    query = scoped_query().options(
         joinedload(Ticket.requester), joinedload(Ticket.assignee)
     )
-
-    if g.user.role in ("l2", "admin"):
-        scope = "All tickets"
-    else:
-        query = query.filter(
-            or_(Ticket.requester_id == g.user.id, Ticket.assignee_id == g.user.id)
-        )
-        scope = "My tickets" if g.user.role == "employee" else "Assigned to me or raised by me"
+    if view == "open":
+        query = query.filter(Ticket.status.in_(OPEN_STATES))
+    elif view == "done":
+        query = query.filter(Ticket.status.in_(DONE_STATES))
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(Ticket.number.ilike(like), Ticket.title.ilike(like)))
 
     tickets = query.order_by(Ticket.id.desc()).limit(100).all()
     rows = [(t, sla.sla_state(t)) for t in tickets]
-    return render_template("tickets.html", rows=rows, scope=scope)
+
+    if g.user.role in ("l2", "admin"):
+        scope = "All tickets"
+    elif g.user.role == "l1":
+        scope = "Assigned to me or raised by me"
+    else:
+        scope = "My tickets"
+
+    return render_template(
+        "tickets.html", rows=rows, scope=scope, view=view, q=q, counts=counts
+    )
 
 
 @tickets_bp.route("/tickets/new", methods=["GET", "POST"])
 @login_required
 def ticket_new():
-    categories = _categories()
+    categories = category_names()
 
     if request.method == "POST":
         title = request.form.get("title", "").strip()
@@ -266,5 +344,8 @@ def ticket_detail(ticket_id):
     if not can_view(ticket):
         abort(403)
     return render_template(
-        "ticket_detail.html", ticket=ticket, sla=sla.sla_state(ticket)
+        "ticket_detail.html",
+        ticket=ticket,
+        sla=sla.sla_state(ticket),
+        sla_pct=sla_percent(ticket),
     )

@@ -1,15 +1,18 @@
 from datetime import timedelta, timezone
 
-from flask import Flask, g, jsonify, redirect, render_template, url_for
+from flask import Flask, Response, g, jsonify, redirect, render_template, url_for
 from sqlalchemy import text
+from sqlalchemy.orm import joinedload
 
 from admin import admin_bp
 from auth import auth_bp, login_required, role_required
 from chat import chat_bp
 from config import Config
 from extensions import db
-from models import Ticket
-from tickets import OPEN_STATES, tickets_bp
+from kb import kb_bp
+from models import Ticket, utcnow
+import sla
+from tickets import OPEN_STATES, scoped_query, tickets_bp
 from workflow import queue_counts, workflow_bp
 
 app = Flask(__name__)
@@ -21,6 +24,7 @@ app.register_blueprint(chat_bp)
 app.register_blueprint(tickets_bp)
 app.register_blueprint(workflow_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(kb_bp)
 
 ROLE_LABELS = {
     "employee": "Employee",
@@ -42,6 +46,16 @@ def local_time(value):
     return value.astimezone(DISPLAY_TZ).strftime("%d %b %Y, %I:%M %p") + " IST"
 
 
+@app.route("/favicon.svg")
+def favicon():
+    return Response(render_template("_logo.html"), mimetype="image/svg+xml")
+
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    return redirect(url_for("favicon"))
+
+
 @app.route("/")
 def home():
     if g.user:
@@ -52,15 +66,52 @@ def home():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    open_count = Ticket.query.filter(
-        Ticket.requester_id == g.user.id, Ticket.status.in_(OPEN_STATES)
-    ).count()
-    counts = queue_counts(g.user) if g.user.role in ("l1", "l2", "admin") else None
+    user = g.user
+    open_filter = Ticket.status.in_(OPEN_STATES)
+
+    if user.role in ("l1", "l2"):
+        c = queue_counts(user)
+        tiles = [
+            {"label": "In my queue", "value": c["mine"], "tone": ""},
+            {"label": "Waiting for a technician", "value": c["unassigned"],
+             "tone": "warn" if c["unassigned"] else ""},
+            {"label": "Overdue", "value": c["overdue"],
+             "tone": "bad" if c["overdue"] else ""},
+        ]
+    elif user.role == "admin":
+        open_n = Ticket.query.filter(open_filter).count()
+        unassigned = Ticket.query.filter(open_filter, Ticket.assignee_id.is_(None)).count()
+        overdue = Ticket.query.filter(open_filter, Ticket.sla_due_at < utcnow()).count()
+        tiles = [
+            {"label": "Open tickets", "value": open_n, "tone": ""},
+            {"label": "Unassigned", "value": unassigned,
+             "tone": "warn" if unassigned else ""},
+            {"label": "Overdue", "value": overdue, "tone": "bad" if overdue else ""},
+        ]
+    else:
+        mine = Ticket.query.filter(Ticket.requester_id == user.id)
+        total = mine.count()
+        open_n = mine.filter(open_filter).count()
+        tiles = [
+            {"label": "My open tickets", "value": open_n, "tone": ""},
+            {"label": "Resolved", "value": total - open_n, "tone": ""},
+            {"label": "Total raised", "value": total, "tone": ""},
+        ]
+
+    recent = (
+        scoped_query()
+        .options(joinedload(Ticket.requester), joinedload(Ticket.assignee))
+        .order_by(Ticket.id.desc())
+        .limit(5)
+        .all()
+    )
+    rows = [(t, sla.sla_state(t)) for t in recent]
+
     return render_template(
         "dashboard.html",
-        role_label=ROLE_LABELS.get(g.user.role, g.user.role),
-        open_count=open_count,
-        counts=counts,
+        role_label=ROLE_LABELS.get(user.role, user.role),
+        tiles=tiles,
+        rows=rows,
     )
 
 

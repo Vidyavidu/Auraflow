@@ -7,7 +7,7 @@ from auth import role_required
 from extensions import db
 from models import ROLES, Ticket, TicketUpdate, User, utcnow
 import sla
-from tickets import OPEN_STATES
+from tickets import OPEN_STATES, category_names
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -141,6 +141,7 @@ def build_stats():
             {
                 "name": tech.name,
                 "role": tech.role.upper(),
+                "specialties": tech.specialty_list(),
                 "open": open_by.get(tech.id, 0),
                 "solved": solved_by.get(tech.id, 0),
                 "rating": round(avg, 2) if avg is not None else None,
@@ -183,7 +184,12 @@ def users():
         .all()
     )
     rows = [(u, open_by.get(u.id, 0)) for u in User.query.order_by(User.id).all()]
-    return render_template("admin_users.html", rows=rows, roles=ROLES)
+    return render_template(
+        "admin_users.html",
+        rows=rows,
+        roles=ROLES,
+        categories=category_names(published_only=False, include_general=False),
+    )
 
 
 @admin_bp.route("/users/<int:user_id>/role", methods=["POST"])
@@ -217,8 +223,36 @@ def change_role(user_id):
 
     old_role = target.role
     target.role = new_role
+    if new_role not in ("l1", "l2"):
+        target.specialties = None  # only technicians have specialties
     db.session.commit()
     flash(f"{target.name} changed from {old_role.upper()} to {new_role.upper()}.", "success")
+    return redirect(url_for("admin.users"))
+
+
+@admin_bp.route("/users/<int:user_id>/specialties", methods=["POST"])
+@role_required("admin")
+def set_specialties(user_id):
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+    if target.role not in ("l1", "l2"):
+        flash("Only L1 and L2 technicians have specialties.", "error")
+        return redirect(url_for("admin.users"))
+
+    allowed = {c.lower(): c for c in category_names(published_only=False, include_general=False)}
+    chosen = []
+    for raw in request.form.getlist("specialties"):
+        name = allowed.get(raw.strip().lower())
+        if name and name not in chosen:
+            chosen.append(name)
+
+    target.set_specialties(chosen)
+    db.session.commit()
+    if chosen:
+        flash(f"{target.name} now handles: {', '.join(chosen)}.", "success")
+    else:
+        flash(f"{target.name} is now a generalist and can take any category.", "success")
     return redirect(url_for("admin.users"))
 
 

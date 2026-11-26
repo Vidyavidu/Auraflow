@@ -23,6 +23,9 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="employee")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # Comma-separated article categories this technician handles.
+    # Empty means a generalist who can take any category.
+    specialties = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow)
 
     def set_password(self, password):
@@ -31,12 +34,23 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+    def specialty_list(self):
+        return [s.strip() for s in (self.specialties or "").split(",") if s.strip()]
+
+    def set_specialties(self, names):
+        self.specialties = ", ".join(names) if names else None
+
+    def handles(self, category):
+        wanted = (category or "").strip().lower()
+        return bool(wanted) and wanted in [s.lower() for s in self.specialty_list()]
+
     def to_dict(self):
         return {
             "id": self.id,
             "name": self.name,
             "email": self.email,
             "role": self.role,
+            "specialties": self.specialty_list(),
         }
 
 

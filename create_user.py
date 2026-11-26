@@ -4,6 +4,7 @@ from getpass import getpass
 from app import app
 from extensions import db
 from models import ROLES, User
+from tickets import category_names
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -30,6 +31,36 @@ def ask_password():
         return password
 
 
+def ask_specialties(role):
+    if role not in ("l1", "l2"):
+        return []
+
+    names = category_names(published_only=False, include_general=False)
+    lookup = {n.lower(): n for n in names}
+    print("Categories:", ", ".join(names))
+    print("Type the categories this technician handles, separated by commas.")
+    print("Leave blank for a generalist who can take any category.")
+
+    while True:
+        raw = input("Specialties: ").strip()
+        if not raw:
+            return []
+        chosen, unknown = [], []
+        for part in raw.split(","):
+            key = part.strip().lower()
+            if not key:
+                continue
+            if key in lookup:
+                if lookup[key] not in chosen:
+                    chosen.append(lookup[key])
+            else:
+                unknown.append(part.strip())
+        if unknown:
+            print("Not a known category:", ", ".join(unknown), "- try again.")
+            continue
+        return chosen
+
+
 def run():
     name = input("Full name: ").strip()
     if not name:
@@ -46,15 +77,25 @@ def run():
         return
 
     role = ask_role()
+    specialties = ask_specialties(role)
     password = ask_password()
 
     user = User(name=name, email=email, role=role)
     user.set_password(password)
+    user.set_specialties(specialties)
     db.session.add(user)
     db.session.commit()
-    print(f"Created {role} account for {email} (id {user.id}).")
+
+    extra = ""
+    if role in ("l1", "l2"):
+        extra = f" Specialties: {', '.join(specialties) if specialties else 'generalist'}."
+    print(f"Created {role} account for {email} (id {user.id}).{extra}")
 
 
 if __name__ == "__main__":
     with app.app_context():
-        run()
+        while True:
+            run()
+            again = input("\nCreate another user? (y/n): ").strip().lower()
+            if again != "y":
+                break

@@ -1,43 +1,76 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar %}
 {% block title %}Tickets - Auraflow{% endblock %}
 {% block content %}
-{% include "_ticket_styles.html" %}
-<div class="card">
-  <div class="topbar">
+{% set pri = {"critical": "1 - Critical", "high": "2 - High", "medium": "3 - Moderate", "low": "4 - Low"} %}
+<style>
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .toolbar form { display: flex; gap: 8px; }
+  .toolbar input { width: 260px; max-width: 100%; }
+  .empty { text-align: center; padding: 36px 10px; }
+  .empty .big { font-size: 2.2rem; }
+</style>
+
+<div class="topbar">
+  <div>
     <h1>{{ scope }}</h1>
-    <div class="actions">
-      <a class="btn" href="{{ url_for('tickets.ticket_new') }}">Raise a ticket</a>
-      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
-    </div>
+    <div class="muted">Incident list</div>
   </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('tickets.ticket_new') }}">+ Raise a ticket</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <div class="tabs" style="border-bottom:0; margin-bottom:0;">
+      <a href="{{ url_for('tickets.ticket_list', view='all', q=q) }}" class="{{ 'on' if view == 'all' else '' }}">All<span class="count">{{ counts.all }}</span></a>
+      <a href="{{ url_for('tickets.ticket_list', view='open', q=q) }}" class="{{ 'on' if view == 'open' else '' }}">Open<span class="count">{{ counts.open }}</span></a>
+      <a href="{{ url_for('tickets.ticket_list', view='done', q=q) }}" class="{{ 'on' if view == 'done' else '' }}">Resolved<span class="count">{{ counts.done }}</span></a>
+    </div>
+    <form method="get" action="{{ url_for('tickets.ticket_list') }}">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Search number or description">
+      <button class="secondary" type="submit">Search</button>
+    </form>
+  </div>
+  <div style="height:14px;"></div>
 
   {% if rows %}
   <div class="scroll-x">
     <table class="tickets">
       <thead>
         <tr>
-          <th>Number</th><th>Title</th><th>Urgency</th><th>Status</th>
-          <th>SLA</th><th>Requested by</th><th>Assigned to</th><th>Created</th>
+          <th>Number</th><th>Short description</th><th>Caller</th><th>Priority</th>
+          <th>State</th><th>Assigned to</th><th>SLA</th><th>Opened</th>
         </tr>
       </thead>
       <tbody>
         {% for t, sla in rows %}
         <tr>
-          <td><a href="{{ url_for('tickets.ticket_detail', ticket_id=t.id) }}">{{ t.number }}</a></td>
+          <td><a class="num-link" href="{{ url_for('tickets.ticket_detail', ticket_id=t.id) }}">{{ t.number }}</a></td>
           <td>{{ t.title }}</td>
-          <td><span class="pill {{ t.urgency }}">{{ t.urgency | upper }}</span></td>
+          <td><div class="person">{{ avatar(t.requester.name, "sm") }}<span>{{ t.requester.name }}</span></div></td>
+          <td><span class="pill {{ t.urgency }}">{{ pri.get(t.urgency, t.urgency) }}</span></td>
           <td><span class="pill">{{ t.status | replace("_", " ") | title }}</span></td>
+          <td>
+            {% if t.assignee %}
+            <div class="person">{{ avatar(t.assignee.name, "sm") }}<div>{{ t.assignee.name }}<div class="sub">L{{ t.level }} Support</div></div></div>
+            {% else %}<span class="muted">Unassigned</span>{% endif %}
+          </td>
           <td><span class="pill {{ sla.state }}">{{ sla.label }}</span></td>
-          <td>{{ t.requester.name }}</td>
-          <td>{{ t.assignee.name if t.assignee else "Unassigned" }}</td>
-          <td>{{ t.created_at | local_time }}</td>
+          <td style="white-space:nowrap;">{{ t.created_at | local_time }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <p class="muted">No tickets yet. Ask the assistant first, or raise a ticket directly.</p>
+  <div class="empty">
+    <div class="big">&#127915;</div>
+    <p class="muted">{% if q %}No tickets match "{{ q }}".{% else %}Nothing here yet.{% endif %}</p>
+    <a class="btn" href="{{ url_for('chat.chat_page') }}">Ask the assistant</a>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

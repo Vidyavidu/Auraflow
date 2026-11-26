@@ -1,16 +1,15 @@
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
-from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from auth import login_required, role_required
 from extensions import db
 from models import Ticket, TicketUpdate, User, utcnow
 import sla
-from tickets import OPEN_STATES, can_view
+from tickets import OPEN_STATES, can_view, describe_pick, pick_technician
 
 workflow_bp = Blueprint("workflow", __name__)
 
-STAFF = ("l1", "l2", "admin")
+STAFF = ("l1", "l2")  # admins manage, they do not work tickets
 MAX_NOTE = 1000
 
 
@@ -25,8 +24,8 @@ def _get_ticket(ticket_id):
 
 
 def _can_work(ticket):
-    """L2 and Admin can work any ticket. L1 only their own assigned ones."""
-    if g.user.role in ("l2", "admin"):
+    """L2 can work any ticket. L1 only their own assigned ones."""
+    if g.user.role == "l2":
         return True
     return g.user.role == "l1" and ticket.assignee_id == g.user.id
 
@@ -37,21 +36,6 @@ def _log(ticket, kind, note):
 
 def _back(ticket):
     return redirect(url_for("tickets.ticket_detail", ticket_id=ticket.id))
-
-
-def _pick_technician(role):
-    """Active technician of this role with the fewest open tickets."""
-    return (
-        db.session.query(User)
-        .outerjoin(
-            Ticket,
-            (Ticket.assignee_id == User.id) & Ticket.status.in_(OPEN_STATES),
-        )
-        .filter(User.role == role, User.is_active.is_(True))
-        .group_by(User.id)
-        .order_by(func.count(Ticket.id).asc(), User.id.asc())
-        .first()
-    )
 
 
 def _clean_note(field, minimum=0):
@@ -84,7 +68,7 @@ def ticket_actions(ticket):
     actions["can_start"] = can_work and ticket.status in ("open", "escalated")
     actions["can_resolve"] = can_work and is_open
     actions["can_escalate"] = (
-        can_work and user.role in ("l1", "admin") and ticket.level == 1 and is_open
+        can_work and user.role == "l1" and ticket.level == 1 and is_open
     )
     actions["can_reassign"] = user.role in ("l2", "admin") and is_open
     actions["can_rate"] = (
@@ -109,7 +93,7 @@ def inject_helpers():
 
 
 def _guard(ticket_id, key):
-    """Returns the ticket if the action is allowed, otherwise None (after a flash)."""
+    """Returns (ticket, allowed). Flashes a message when not allowed."""
     ticket = _get_ticket(ticket_id)
     if not ticket_actions(ticket)[key]:
         flash("That action is not available for this ticket right now.", "error")
@@ -134,7 +118,7 @@ def queue_counts(user):
 
 # ---------- queue ----------
 @workflow_bp.route("/queue")
-@role_required("l1", "l2", "admin")
+@role_required("l1", "l2")
 def queue():
     user = g.user
     base = Ticket.query.options(
@@ -150,12 +134,12 @@ def queue():
     waiting = base.filter(Ticket.assignee_id.is_(None))
     if user.role == "l1":
         waiting = waiting.filter(Ticket.level == 1)
-    elif user.role == "l2":
+    else:
         waiting = waiting.filter(Ticket.level == 2)
     unassigned = waiting.order_by(Ticket.sla_due_at.asc()).all()
 
     others = []
-    if user.role in ("l2", "admin"):
+    if user.role == "l2":
         others = (
             base.filter(Ticket.assignee_id.isnot(None), Ticket.assignee_id != user.id)
             .order_by(Ticket.sla_due_at.asc())
@@ -176,18 +160,14 @@ def queue():
 
 # ---------- actions ----------
 @workflow_bp.route("/tickets/<int:ticket_id>/claim", methods=["POST"])
-@role_required("l1", "l2", "admin")
+@role_required("l1", "l2")
 def claim(ticket_id):
     ticket = db.session.get(Ticket, ticket_id)
     if ticket is None:
         abort(404)
 
     role = g.user.role
-    level_ok = (
-        role == "admin"
-        or (role == "l1" and ticket.level == 1)
-        or (role == "l2" and ticket.level == 2)
-    )
+    level_ok = (role == "l1" and ticket.level == 1) or (role == "l2" and ticket.level == 2)
     if not level_ok or ticket.status not in OPEN_STATES:
         flash("You cannot claim that ticket.", "error")
         return redirect(url_for("workflow.queue"))
@@ -275,13 +255,13 @@ def escalate(ticket_id):
         flash(f"Please explain why (5 to {MAX_NOTE} characters).", "error")
         return _back(ticket)
 
-    target = _pick_technician("l2")
+    target, how = pick_technician("l2", ticket.category)
     ticket.level = 2
     ticket.status = "escalated"
     ticket.assignee_id = target.id if target else None
 
     where = (
-        f"Assigned to {target.name} (L2)."
+        describe_pick(target, how, "L2", ticket.category)
         if target
         else "No L2 technician is available, so it is waiting in the L2 queue."
     )
@@ -290,9 +270,7 @@ def escalate(ticket_id):
     flash(f"{ticket.number} escalated to L2.", "success")
 
     # An L1 can no longer open the ticket once it is assigned to L2
-    if g.user.role == "l1":
-        return redirect(url_for("workflow.queue"))
-    return _back(ticket)
+    return redirect(url_for("workflow.queue"))
 
 
 @workflow_bp.route("/tickets/<int:ticket_id>/reassign", methods=["POST"])

@@ -1,93 +1,264 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Auraflow{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('favicon') }}">
+  <script>
+    (function () {
+      var theme = "light";
+      try {
+        theme = localStorage.getItem("af-theme");
+        if (!theme) {
+          theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+      } catch (e) { theme = "light"; }
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
   <style>
     :root {
-      --bg: #C1D1CF;
-      --card: #E4ECEA;
+      --bg: #D5E0DE;
+      --bg-grad: linear-gradient(160deg, #C1D1CF 0%, #DCE6E4 65%);
+      --card: #F5F8F7;
+      --card-2: #E8EFED;
       --text: #171F22;
-      --muted: #636467;
+      --muted: #55666B;
       --brand: #171F22;
-      --brand-text: #C1D1CF;
+      --brand-text: #EAF0EF;
       --accent: #748B91;
-      --border: #A3B5B3;
+      --accent-strong: #4A6167;
+      --border: #BCCAC8;
       --header-bg: #171F22;
       --header-text: #C1D1CF;
-      --input-bg: #F1F5F4;
-      --error-bg: #EBD3D0; --error-text: #6E1F18;
-      --ok-bg: #CFE3D6;    --ok-text: #1B4D31;
-      --info-bg: #CBD9DC;  --info-text: #1F3A40;
+      --input-bg: #FFFFFF;
+      --shadow: 0 1px 2px rgba(23,31,34,.06), 0 8px 24px rgba(23,31,34,.08);
+      --error-bg: #F3D9D6; --error-text: #8A2A20;
+      --ok-bg: #D3E8DA;    --ok-text: #1D5A38;
+      --info-bg: #D4E1E4;  --info-text: #26444B;
+      --warn-bg: #F0E4C6;  --warn-text: #6B4F0E;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #171F22;
-        --card: #1F292D;
-        --text: #C1D1CF;
-        --muted: #748B91;
-        --brand: #748B91;
-        --brand-text: #171F22;
-        --accent: #748B91;
-        --border: #363F43;
-        --header-bg: #11171A;
-        --header-text: #C1D1CF;
-        --input-bg: #171F22;
-        --error-bg: #3A2323; --error-text: #F0B9B3;
-        --ok-bg: #1F3328;    --ok-text: #A9DDBD;
-        --info-bg: #263539;  --info-text: #C1D1CF;
-      }
+    :root[data-theme="dark"] {
+      --bg: #0E1417;
+      --bg-grad: linear-gradient(160deg, #0E1417 0%, #151F24 100%);
+      --card: #182126;
+      --card-2: #1F2A30;
+      --text: #DCE6E4;
+      --muted: #8CA0A5;
+      --brand: #748B91;
+      --brand-text: #0E1417;
+      --accent: #748B91;
+      --accent-strong: #9DB3B8;
+      --border: #2B3840;
+      --header-bg: #0A0F11;
+      --header-text: #C1D1CF;
+      --input-bg: #11191D;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+      --error-bg: #3B2424; --error-text: #F2BDB6;
+      --ok-bg: #1E3528;    --ok-text: #A8DDBC;
+      --info-bg: #22343A;  --info-text: #C1D1CF;
+      --warn-bg: #3A3322;  --warn-text: #E8D39B;
     }
+    html { color-scheme: light; }
+    html[data-theme="dark"] { color-scheme: dark; }
+
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-           background: var(--bg); color: var(--text); line-height: 1.5; }
-    header { display: flex; justify-content: space-between; align-items: center;
-             gap: 12px; flex-wrap: wrap; padding: 14px 24px;
-             background: var(--header-bg); border-bottom: 2px solid var(--accent); }
-    .brand { font-weight: 700; font-size: 1.2rem; letter-spacing: .5px;
-             color: var(--header-text); text-decoration: none; }
-    .who { display: flex; align-items: center; gap: 12px; color: var(--header-text); font-size: .95rem; }
-    .badge { background: var(--accent); color: #171F22; padding: 2px 10px;
-             border-radius: 999px; font-size: .8rem; font-weight: 700; }
-    main { max-width: 960px; margin: 32px auto; padding: 0 16px; }
-    .card { background: var(--card); border: 1px solid var(--border);
-            border-radius: 14px; padding: 28px; }
-    .narrow { max-width: 420px; margin: 0 auto; }
-    h1 { margin-top: 0; font-size: 1.5rem; }
-    label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: .92rem; }
-    input { width: 100%; padding: 10px 12px; border-radius: 8px; font-size: 1rem;
-            border: 1px solid var(--border); background: var(--input-bg); color: var(--text); }
-    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-    button, .btn { display: inline-block; cursor: pointer; border: 0; border-radius: 8px;
-                   padding: 10px 18px; font-size: 1rem; font-weight: 600;
-                   background: var(--brand); color: var(--brand-text); text-decoration: none; }
-    button:hover, .btn:hover { filter: brightness(1.12); }
-    button.full { width: 100%; margin-top: 20px; }
-    button.ghost { background: transparent; color: var(--header-text);
-                   border: 1px solid var(--muted); padding: 6px 12px; font-size: .9rem; }
-    .flash { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: .95rem; }
-    .flash.error { background: var(--error-bg); color: var(--error-text); }
-    .flash.success { background: var(--ok-bg); color: var(--ok-text); }
-    .flash.info { background: var(--info-bg); color: var(--info-text); }
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+           font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+           background: var(--bg-grad); background-attachment: fixed;
+           color: var(--text); line-height: 1.55; font-size: 16px; }
+    a { color: var(--text); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+    h1 { margin: 0 0 6px; font-size: 1.6rem; letter-spacing: -.2px; }
+    h2 { font-size: 1.1rem; }
+
+    /* ---------- header ---------- */
+    .site-header { position: sticky; top: 0; z-index: 50; background: var(--header-bg);
+                   border-bottom: 1px solid rgba(116,139,145,.35);
+                   box-shadow: 0 2px 12px rgba(0,0,0,.18); }
+    .header-inner { max-width: 1180px; margin: 0 auto; padding: 10px 20px;
+                    display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--header-text);
+             text-decoration: none; font-weight: 700; font-size: 1.2rem; letter-spacing: .3px; }
+    .brand svg { display: block; }
+    .brand-text small { display: block; font-size: .62rem; font-weight: 500; opacity: .7;
+                        letter-spacing: 1.3px; text-transform: uppercase; margin-top: -2px; }
+    .nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+    .nav a { color: var(--header-text); text-decoration: none; padding: 7px 12px;
+             border-radius: 8px; font-size: .92rem; font-weight: 500; opacity: .85; }
+    .nav a:hover { background: rgba(116,139,145,.22); opacity: 1; }
+    .nav a.on { background: var(--accent); color: #11181B; opacity: 1; font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .who { display: flex; align-items: center; gap: 8px; color: var(--header-text); font-size: .92rem; }
+    .badge { background: rgba(116,139,145,.3); color: var(--header-text); padding: 2px 9px;
+             border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .4px; }
+    .icon-btn { width: 36px; height: 36px; padding: 0; border-radius: 10px; font-size: 1.05rem;
+                line-height: 1; background: transparent; color: var(--header-text);
+                border: 1px solid rgba(116,139,145,.55); }
+    .icon-btn:hover { background: rgba(116,139,145,.25); filter: none; }
+    .i-sun { display: none; }
+    html[data-theme="dark"] .i-sun { display: inline; }
+    html[data-theme="dark"] .i-moon { display: none; }
+    .site-header button.ghost { color: var(--header-text); border-color: rgba(116,139,145,.55);
+                                padding: 6px 12px; }
+    .avatar { display: inline-flex; align-items: center; justify-content: center; flex: none;
+              width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+              color: #11181B; font-weight: 700; font-size: .8rem; }
+    .avatar.sm { width: 28px; height: 28px; font-size: .72rem; }
+    .avatar.lg { width: 44px; height: 44px; font-size: 1rem; }
+
+    /* ---------- layout ---------- */
+    main { flex: 1; width: 100%; max-width: 1180px; margin: 28px auto 40px; padding: 0 20px; }
+    .site-footer { text-align: center; color: var(--muted); font-size: .82rem; padding: 0 16px 22px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+            padding: 26px; box-shadow: var(--shadow); }
+    .narrow { max-width: 440px; margin: 0 auto; }
+    .topbar { display: flex; justify-content: space-between; align-items: center;
+              flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .topbar h1 { margin: 0; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
     .muted { color: var(--muted); }
     .small { font-size: .9rem; margin-top: 18px; text-align: center; }
-    a { color: var(--text); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+    .stack { display: grid; gap: 18px; }
+
+    /* ---------- forms and buttons ---------- */
+    label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: .9rem; }
+    input, select, textarea { width: 100%; padding: 10px 12px; border-radius: 10px; font-size: 1rem;
+            font-family: inherit; border: 1px solid var(--border);
+            background: var(--input-bg); color: var(--text); }
+    textarea { min-height: 120px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button, .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                   cursor: pointer; border: 1px solid transparent; border-radius: 10px;
+                   padding: 10px 18px; font-size: .97rem; font-weight: 600; font-family: inherit;
+                   background: var(--brand); color: var(--brand-text); text-decoration: none; }
+    button:hover, .btn:hover { filter: brightness(1.12); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button.full { width: 100%; margin-top: 20px; }
+    .btn.secondary, button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+    .btn.secondary:hover, button.secondary:hover { background: var(--card-2); filter: none; }
+    .btn.sm, button.sm { padding: 6px 12px; font-size: .86rem; }
+    button.ghost { background: transparent; color: var(--text); border: 1px solid var(--border);
+                   padding: 6px 12px; font-size: .88rem; }
+
+    .flash { padding: 11px 14px; border-radius: 10px; margin-bottom: 16px; font-size: .95rem;
+             border-left: 4px solid var(--accent); }
+    .flash.error { background: var(--error-bg); color: var(--error-text); border-color: var(--error-text); }
+    .flash.success { background: var(--ok-bg); color: var(--ok-text); border-color: var(--ok-text); }
+    .flash.info { background: var(--info-bg); color: var(--info-text); }
+
+    /* ---------- pills, tables, tiles ---------- */
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .76rem;
+            font-weight: 700; white-space: nowrap; background: var(--card-2); color: var(--text);
+            border: 1px solid var(--border); }
+    .pill.low, .pill.on_track, .pill.met { background: var(--ok-bg); color: var(--ok-text); border-color: transparent; }
+    .pill.medium { background: var(--info-bg); color: var(--info-text); border-color: transparent; }
+    .pill.high, .pill.at_risk { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
+    .pill.critical, .pill.breached { background: var(--error-bg); color: var(--error-text); border-color: transparent; }
+
+    .scroll-x { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+    table.tickets { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .91rem; }
+    table.tickets th { background: var(--card-2); color: var(--muted); font-size: .72rem;
+                       text-transform: uppercase; letter-spacing: .6px; text-align: left;
+                       padding: 11px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    table.tickets td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    table.tickets tbody tr:hover td { background: var(--card-2); }
+    table.tickets tbody tr:last-child td { border-bottom: 0; }
+    .num-link { font-weight: 700; white-space: nowrap; }
+    .person { display: flex; align-items: center; gap: 10px; }
+    .person .sub { color: var(--muted); font-size: .8rem; }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+             gap: 14px; margin: 0 0 22px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+            padding: 16px 18px; box-shadow: var(--shadow); }
+    .stat .name { color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+    .stat .value { font-size: 1.9rem; font-weight: 700; line-height: 1.15; }
+    .stat .sub { color: var(--muted); font-size: .8rem; }
+    .stat.warn .value { color: var(--warn-text); }
+    .stat.bad .value { color: var(--error-text); }
+
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tabs a { padding: 9px 14px; text-decoration: none; color: var(--muted); font-weight: 600;
+              border-bottom: 3px solid transparent; margin-bottom: -1px; }
+    .tabs a.on { color: var(--text); border-color: var(--accent); }
+    .tabs .count { background: var(--card-2); border-radius: 999px; padding: 1px 8px;
+                   font-size: .74rem; margin-left: 6px; }
+
+    .meter { height: 10px; border-radius: 999px; background: var(--card-2);
+             border: 1px solid var(--border); overflow: hidden; margin: 10px 0 6px; }
+    .meter-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+    .meter-fill.on_track, .meter-fill.met { background: var(--ok-text); }
+    .meter-fill.at_risk { background: var(--warn-text); }
+    .meter-fill.breached { background: var(--error-text); }
+
+    /* ---------- login / register ---------- */
+    .auth { display: grid; grid-template-columns: 1.1fr 1fr; max-width: 900px; margin: 18px auto;
+            border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); }
+    .auth-hero { background: linear-gradient(150deg, #171F22, #2C3C42); color: #C1D1CF;
+                 padding: 40px 34px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+    .auth-hero svg { width: 56px; height: 56px; }
+    .auth-hero h2 { margin: 0; font-size: 1.55rem; color: #EAF0EF; line-height: 1.25; }
+    .auth-hero p { margin: 0; opacity: .85; }
+    .auth-hero ul { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 9px; font-size: .93rem; }
+    .auth-hero li::before { content: "\2713"; color: #748B91; font-weight: 700; margin-right: 10px; }
+    .auth-form { background: var(--card); padding: 36px 34px; }
+
+    @media (max-width: 760px) {
+      .auth { grid-template-columns: 1fr; }
+      .auth-hero { padding: 24px; }
+      .auth-form { padding: 24px; }
+      .who-name { display: none; }
+      .card { padding: 18px; }
+      main { margin-top: 18px; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <a class="brand" href="/">Auraflow</a>
-    {% if g.user %}
-    <div class="who">
-      <span>{{ g.user.name }}</span>
-      <span class="badge">{{ g.user.role | upper }}</span>
-      <form method="post" action="{{ url_for('auth.logout') }}">
-        <button class="ghost" type="submit">Sign out</button>
-      </form>
+  {% from "_macros.html" import avatar %}
+  {% set ep = request.endpoint or "" %}
+  {% set on_tickets = ep.startswith("tickets.") or (ep.startswith("workflow.") and ep != "workflow.queue") %}
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/">
+        {% include "_logo.html" %}
+        <span class="brand-text">Auraflow<small>IT Support</small></span>
+      </a>
+
+      {% if g.user %}
+      <nav class="nav" aria-label="Main">
+        <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep == 'dashboard' else '' }}">Dashboard</a>
+        <a href="{{ url_for('chat.chat_page') }}" class="{{ 'on' if ep == 'chat.chat_page' else '' }}">Assistant</a>
+        <a href="{{ url_for('tickets.ticket_list') }}" class="{{ 'on' if on_tickets else '' }}">Tickets</a>
+        {% if g.user.role in ("l1", "l2") %}
+        <a href="{{ url_for('workflow.queue') }}" class="{{ 'on' if ep == 'workflow.queue' else '' }}">Work queue</a>
+        {% endif %}
+        {% if g.user.role == "admin" %}
+        <a href="{{ url_for('admin.analytics') }}" class="{{ 'on' if ep == 'admin.analytics' else '' }}">Analytics</a>
+        <a href="{{ url_for('admin.users') }}" class="{{ 'on' if ep == 'admin.users' else '' }}">Users</a>
+        <a href="{{ url_for('kb.article_list') }}" class="{{ 'on' if ep.startswith('kb.') else '' }}">Knowledge base</a>
+        {% endif %}
+      </nav>
+      {% endif %}
+
+      <div class="header-right">
+        <button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch between light and dark theme" title="Switch theme">
+          <span class="i-moon">&#9790;</span><span class="i-sun">&#9728;</span>
+        </button>
+        {% if g.user %}
+        <div class="who">
+          {{ avatar(g.user.name) }}
+          <span class="who-name">{{ g.user.name }}</span>
+          <span class="badge">{{ g.user.role | upper }}</span>
+        </div>
+        <form method="post" action="{{ url_for('auth.logout') }}">
+          <button class="ghost" type="submit">Sign out</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
-    {% endif %}
   </header>
+
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}
@@ -96,5 +267,19 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+
+  <footer class="site-footer">Auraflow &middot; AI-assisted IT support</footer>
+
+  <script>
+    (function () {
+      var button = document.getElementById("theme-toggle");
+      if (!button) { return; }
+      button.addEventListener("click", function () {
+        var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem("af-theme", next); } catch (e) { /* ignore */ }
+      });
+    })();
+  </script>
 </body>
 </html>

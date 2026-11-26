@@ -1,180 +1,288 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar %}
 {% block title %}{{ ticket.number }} - Auraflow{% endblock %}
 {% block content %}
-{% include "_ticket_styles.html" %}
 {% set a = ticket_actions(ticket) %}
+{% set pri = {"critical": "1 - Critical", "high": "2 - High", "medium": "3 - Moderate", "low": "4 - Low"} %}
+{% set stage = {"open": 0, "in_progress": 1, "escalated": 1, "resolved": 2, "closed": 3}.get(ticket.status, 0) %}
 <style>
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-          gap: 14px 24px; margin: 18px 0; }
-  .grid dt { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .4px; }
-  .grid dd { margin: 2px 0 0; font-weight: 600; }
-  .desc { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border);
+  .crumbs { color: var(--muted); font-size: .88rem; margin-bottom: 12px; }
+  .crumbs span { margin: 0 6px; }
+  .head-top { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .kicker { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+  .head h1 { margin: 2px 0 4px; font-size: 1.8rem; }
+  .short { margin: 0; font-size: 1.05rem; font-weight: 600; }
+  .head-pills { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+
+  .steps { display: flex; list-style: none; padding: 0; margin: 22px 0 2px; }
+  .steps li { flex: 1; text-align: center; position: relative; font-size: .8rem; font-weight: 600; color: var(--muted); }
+  .steps li::before { content: ""; display: block; width: 26px; height: 26px; border-radius: 50%;
+        margin: 0 auto 6px; background: var(--card-2); border: 2px solid var(--border);
+        position: relative; z-index: 1; font-size: .8rem; line-height: 22px; color: #11181B; }
+  .steps li::after { content: ""; position: absolute; top: 13px; left: calc(50% + 13px);
+        right: calc(-50% + 13px); height: 2px; background: var(--border); }
+  .steps li:last-child::after { display: none; }
+  .steps li.done::before { content: "\2713"; background: var(--accent); border-color: var(--accent); }
+  .steps li.done::after { background: var(--accent); }
+  .steps li.current::before { background: var(--card); border-color: var(--accent-strong);
+        box-shadow: 0 0 0 4px rgba(116,139,145,.3); }
+  .steps li.done, .steps li.current { color: var(--text); }
+  .steps small { display: block; font-weight: 500; color: var(--muted); }
+
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px;
+                 align-items: start; margin-top: 20px; }
+  @media (max-width: 920px) { .detail-grid { grid-template-columns: 1fr; } }
+
+  .card h2 { margin: 0 0 14px; font-size: 1.05rem; }
+  .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 22px; }
+  @media (max-width: 640px) { .fields { grid-template-columns: 1fr; } }
+  .field .k { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .5px;
+              color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+  .field .v { background: var(--card-2); border: 1px solid var(--border); border-radius: 8px;
+              padding: 8px 12px; min-height: 40px; display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .field.wide { grid-column: 1 / -1; }
+  .desc { white-space: pre-wrap; background: var(--card-2); border: 1px solid var(--border);
           border-radius: 10px; padding: 12px 14px; }
-  .timeline { list-style: none; padding: 0; margin: 0; }
-  .timeline li { border-left: 3px solid var(--accent); padding: 4px 0 14px 14px; margin-left: 6px; }
-  .timeline .when { color: var(--muted); font-size: .82rem; }
-  .timeline .kind { font-size: .72rem; font-weight: 700; text-transform: uppercase;
-                    letter-spacing: .4px; color: var(--muted); display: block; }
-  .timeline .note { white-space: pre-wrap; }
-  h2 { font-size: 1.1rem; margin: 24px 0 8px; }
-  .panel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
-           padding: 14px 16px; margin-bottom: 12px; }
-  .panel details summary { cursor: pointer; font-weight: 600; }
+
+  .composer textarea { min-height: 84px; }
+  .stream { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; }
+  .msg { display: flex; gap: 10px; }
+  .msg-body { flex: 1; background: var(--card-2); border: 1px solid var(--border);
+              border-radius: 12px; padding: 10px 14px; }
+  .msg-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+  .when { color: var(--muted); font-size: .8rem; }
+  .note { white-space: pre-wrap; word-wrap: break-word; }
+  .evt { display: flex; gap: 12px; padding-left: 6px; }
+  .evt .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); margin-top: 7px; flex: none; }
+  .evt-kind { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--accent-strong); }
+
+  .panel { background: var(--card-2); border: 1px solid var(--border); border-radius: 10px;
+           padding: 12px 14px; margin-bottom: 10px; }
+  .panel summary { cursor: pointer; font-weight: 600; }
   .panel form { margin-top: 10px; }
   .panel textarea { min-height: 80px; }
-  .panel label { margin-top: 10px; }
-  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .stars { font-size: 1.1rem; letter-spacing: 2px; }
+  .stars { font-size: 1.15rem; letter-spacing: 2px; color: var(--warn-text); }
+  .side h2 { font-size: .95rem; }
 </style>
-<div class="card">
-  <div class="topbar">
-    <h1>{{ ticket.number }}</h1>
-    <div class="actions">
-      {% if g.user.role in ("l1", "l2", "admin") %}
-      <a class="btn" href="{{ url_for('workflow.queue') }}">Work queue</a>
-      {% endif %}
-      <a class="btn" href="{{ url_for('tickets.ticket_list') }}">All tickets</a>
-      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
+
+<div class="crumbs"><a href="{{ url_for('tickets.ticket_list') }}">Tickets</a><span>&rsaquo;</span>{{ ticket.number }}</div>
+
+<div class="card head">
+  <div class="head-top">
+    <div>
+      <div class="kicker">Incident</div>
+      <h1>{{ ticket.number }}</h1>
+      <p class="short">{{ ticket.title }}</p>
+    </div>
+    <div class="head-pills">
+      <span class="pill {{ ticket.urgency }}">{{ pri.get(ticket.urgency, ticket.urgency) }}</span>
+      <span class="pill">{{ ticket.status | replace("_", " ") | title }}</span>
+      <span class="pill {{ sla.state }}">{{ sla.label }}</span>
     </div>
   </div>
 
-  <p style="font-size:1.1rem; margin-top:0;"><strong>{{ ticket.title }}</strong></p>
-  <p>
-    <span class="pill {{ ticket.urgency }}">{{ ticket.urgency | upper }}</span>
-    <span class="pill">{{ ticket.status | replace("_", " ") | title }}</span>
-    <span class="pill {{ sla.state }}">{{ sla.label }}</span>
-  </p>
-
-  <dl class="grid">
-    <div><dt>Category</dt><dd>{{ ticket.category }}</dd></div>
-    <div><dt>Requested by</dt><dd>{{ ticket.requester.name }}</dd></div>
-    <div><dt>Assigned to</dt><dd>{{ ticket.assignee.name if ticket.assignee else "Unassigned (waiting for a technician)" }}</dd></div>
-    <div><dt>Support level</dt><dd>L{{ ticket.level }}</dd></div>
-    <div><dt>Created</dt><dd>{{ ticket.created_at | local_time }}</dd></div>
-    <div><dt>SLA due</dt><dd>{{ ticket.sla_due_at | local_time }}</dd></div>
-    {% if ticket.resolved_at %}
-    <div><dt>Resolved</dt><dd>{{ ticket.resolved_at | local_time }}</dd></div>
-    {% endif %}
-    {% if ticket.rating %}
-    <div><dt>Employee rating</dt>
-      <dd><span class="stars">{{ "★" * ticket.rating }}{{ "☆" * (5 - ticket.rating) }}</span> {{ ticket.rating }}/5</dd></div>
-    {% endif %}
-  </dl>
-
-  <h2>Description</h2>
-  <div class="desc">{{ ticket.description }}</div>
-
-  {% if a.can_start or a.can_resolve or a.can_escalate or a.can_reassign %}
-  <h2>Technician actions</h2>
-
-  {% if a.can_start %}
-  <div class="panel">
-    <form method="post" action="{{ url_for('workflow.start', ticket_id=ticket.id) }}" style="margin-top:0;">
-      <button type="submit">Start working</button>
-    </form>
-  </div>
-  {% endif %}
-
-  {% if a.can_resolve %}
-  <div class="panel">
-    <details>
-      <summary>Resolve ticket</summary>
-      <form method="post" action="{{ url_for('workflow.resolve', ticket_id=ticket.id) }}">
-        <label for="resolve-note">What fixed it?</label>
-        <textarea id="resolve-note" name="note" maxlength="1000" required></textarea>
-        <button type="submit" style="margin-top:10px;">Mark as resolved</button>
-      </form>
-    </details>
-  </div>
-  {% endif %}
-
-  {% if a.can_escalate %}
-  <div class="panel">
-    <details>
-      <summary>Escalate to L2</summary>
-      <form method="post" action="{{ url_for('workflow.escalate', ticket_id=ticket.id) }}">
-        <label for="esc-note">Why does this need L2? What have you tried?</label>
-        <textarea id="esc-note" name="note" maxlength="1000" required></textarea>
-        <button type="submit" style="margin-top:10px;">Escalate</button>
-      </form>
-    </details>
-  </div>
-  {% endif %}
-
-  {% if a.can_reassign %}
-  <div class="panel">
-    <details>
-      <summary>Reassign</summary>
-      <form method="post" action="{{ url_for('workflow.reassign', ticket_id=ticket.id) }}">
-        <label for="assignee">Technician</label>
-        <select id="assignee" name="assignee_id" required>
-          {% for tech in a.technicians %}
-          <option value="{{ tech.id }}" {% if tech.id == ticket.assignee_id %}selected{% endif %}>
-            {{ tech.name }} ({{ tech.role | upper }})
-          </option>
-          {% endfor %}
-        </select>
-        <label for="re-note">Note (optional)</label>
-        <textarea id="re-note" name="note" maxlength="1000"></textarea>
-        <button type="submit" style="margin-top:10px;">Reassign</button>
-      </form>
-    </details>
-  </div>
-  {% endif %}
-  {% endif %}
-
-  {% if a.can_rate or a.can_reopen %}
-  <h2>Was your problem solved?</h2>
-  {% if a.can_rate %}
-  <div class="panel">
-    <strong>Rate the support you received</strong>
-    <form method="post" action="{{ url_for('workflow.rate', ticket_id=ticket.id) }}">
-      <label for="rating">Rating</label>
-      <select id="rating" name="rating" required>
-        <option value="">Choose...</option>
-        <option value="5">5 - Excellent</option>
-        <option value="4">4 - Good</option>
-        <option value="3">3 - Okay</option>
-        <option value="2">2 - Poor</option>
-        <option value="1">1 - Very poor</option>
-      </select>
-      <label for="rate-note">Comment (optional)</label>
-      <textarea id="rate-note" name="note" maxlength="500"></textarea>
-      <button type="submit" style="margin-top:10px;">Submit rating</button>
-    </form>
-  </div>
-  {% endif %}
-  {% if a.can_reopen %}
-  <div class="panel">
-    <details>
-      <summary>Not fixed? Reopen this ticket</summary>
-      <form method="post" action="{{ url_for('workflow.reopen', ticket_id=ticket.id) }}">
-        <label for="reopen-note">What is still wrong?</label>
-        <textarea id="reopen-note" name="note" maxlength="1000" required></textarea>
-        <button type="submit" style="margin-top:10px;">Reopen ticket</button>
-      </form>
-    </details>
-  </div>
-  {% endif %}
-  {% endif %}
-
-  <h2>Add a comment</h2>
-  <div class="panel">
-    <form method="post" action="{{ url_for('workflow.comment', ticket_id=ticket.id) }}" style="margin-top:0;">
-      <textarea name="note" maxlength="1000" placeholder="Write an update or question..." required></textarea>
-      <button type="submit" style="margin-top:10px;">Post comment</button>
-    </form>
-  </div>
-
-  <h2>History</h2>
-  <ul class="timeline">
-    {% for u in ticket.updates %}
-    <li>
-      <span class="kind">{{ u.kind | replace("_", " ") }}</span>
-      <div class="note">{{ u.note }}</div>
-      <div class="when">{{ u.created_at | local_time }}{% if u.author %} &middot; {{ u.author.name }}{% else %} &middot; Auraflow{% endif %}</div>
+  <ol class="steps">
+    {% for label in ["New", "In progress", "Resolved", "Closed"] %}
+    <li class="{{ 'done' if loop.index0 < stage else ('current' if loop.index0 == stage else '') }}">
+      {{ label }}
+      {% if loop.index0 == 1 and ticket.status == "escalated" %}<small>Escalated to L2</small>{% endif %}
     </li>
     {% endfor %}
-  </ul>
+  </ol>
+</div>
+
+<div class="detail-grid">
+  <div class="stack">
+
+    <div class="card">
+      <h2>Ticket details</h2>
+      <div class="fields">
+        <div class="field"><span class="k">Number</span><div class="v">{{ ticket.number }}</div></div>
+        <div class="field"><span class="k">Caller</span>
+          <div class="v">{{ avatar(ticket.requester.name, "sm") }}{{ ticket.requester.name }}</div></div>
+        <div class="field"><span class="k">Category</span><div class="v">{{ ticket.category }}</div></div>
+        <div class="field"><span class="k">Priority</span>
+          <div class="v"><span class="pill {{ ticket.urgency }}">{{ pri.get(ticket.urgency, ticket.urgency) }}</span></div></div>
+        <div class="field"><span class="k">State</span>
+          <div class="v">{{ ticket.status | replace("_", " ") | title }}</div></div>
+        <div class="field"><span class="k">Assignment group</span><div class="v">L{{ ticket.level }} Support</div></div>
+        <div class="field"><span class="k">Assigned to</span>
+          <div class="v">
+            {% if ticket.assignee %}{{ avatar(ticket.assignee.name, "sm") }}{{ ticket.assignee.name }}
+            {% else %}<span class="muted">Unassigned (waiting for a technician)</span>{% endif %}
+          </div></div>
+        <div class="field"><span class="k">Opened</span><div class="v">{{ ticket.created_at | local_time }}</div></div>
+        <div class="field"><span class="k">SLA due</span><div class="v">{{ ticket.sla_due_at | local_time }}</div></div>
+        {% if ticket.resolved_at %}
+        <div class="field"><span class="k">Resolved</span><div class="v">{{ ticket.resolved_at | local_time }}</div></div>
+        {% endif %}
+        <div class="field wide"><span class="k">Description</span><div class="desc">{{ ticket.description }}</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Activity</h2>
+      <form class="composer" method="post" action="{{ url_for('workflow.comment', ticket_id=ticket.id) }}">
+        <textarea name="note" maxlength="1000" placeholder="Write an update or question..." required></textarea>
+        <div style="margin-top:10px;"><button type="submit">Post comment</button></div>
+      </form>
+
+      <ul class="stream">
+        {% for u in ticket.updates | reverse %}
+          {% if u.kind == "comment" %}
+          <li class="msg">
+            {{ avatar(u.author.name if u.author else "Auraflow", "sm") }}
+            <div class="msg-body">
+              <div class="msg-head">
+                <strong>{{ u.author.name if u.author else "Auraflow" }}</strong>
+                {% if u.author %}<span class="pill">{{ u.author.role | upper }}</span>{% endif %}
+                <span class="when">{{ u.created_at | local_time }}</span>
+              </div>
+              <div class="note">{{ u.note }}</div>
+            </div>
+          </li>
+          {% else %}
+          <li class="evt">
+            <span class="dot"></span>
+            <div>
+              <span class="evt-kind">{{ u.kind | replace("_", " ") }}</span>
+              <span class="when">&middot; {{ u.created_at | local_time }}{% if u.author %} &middot; {{ u.author.name }}{% else %} &middot; Auraflow{% endif %}</span>
+              <div class="note">{{ u.note }}</div>
+            </div>
+          </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <aside class="stack side">
+
+    <div class="card">
+      <h2>Service level</h2>
+      <span class="pill {{ sla.state }}">{{ sla.label }}</span>
+      <div class="meter"><div class="meter-fill {{ sla.state }}" style="width: {{ sla_pct }}%;"></div></div>
+      <div class="muted" style="font-size:.84rem;">{{ sla_pct }}% of the target time used &middot; due {{ ticket.sla_due_at | local_time }}</div>
+    </div>
+
+    {% if a.can_start or a.can_resolve or a.can_escalate or a.can_reassign %}
+    <div class="card">
+      <h2>{{ "Admin actions" if g.user.role == "admin" else "Technician actions" }}</h2>
+
+      {% if a.can_start %}
+      <div class="panel">
+        <form method="post" action="{{ url_for('workflow.start', ticket_id=ticket.id) }}" style="margin-top:0;">
+          <button type="submit">Start working</button>
+        </form>
+      </div>
+      {% endif %}
+
+      {% if a.can_resolve %}
+      <div class="panel">
+        <details>
+          <summary>Resolve ticket</summary>
+          <form method="post" action="{{ url_for('workflow.resolve', ticket_id=ticket.id) }}">
+            <label for="resolve-note">What fixed it?</label>
+            <textarea id="resolve-note" name="note" maxlength="1000" required></textarea>
+            <button type="submit" style="margin-top:10px;">Mark as resolved</button>
+          </form>
+        </details>
+      </div>
+      {% endif %}
+
+      {% if a.can_escalate %}
+      <div class="panel">
+        <details>
+          <summary>Escalate to L2</summary>
+          <form method="post" action="{{ url_for('workflow.escalate', ticket_id=ticket.id) }}">
+            <label for="esc-note">Why does this need L2? What have you tried?</label>
+            <textarea id="esc-note" name="note" maxlength="1000" required></textarea>
+            <button type="submit" style="margin-top:10px;">Escalate</button>
+          </form>
+        </details>
+      </div>
+      {% endif %}
+
+      {% if a.can_reassign %}
+      <div class="panel">
+        <details>
+          <summary>Reassign</summary>
+          <form method="post" action="{{ url_for('workflow.reassign', ticket_id=ticket.id) }}">
+            <label for="assignee">Technician</label>
+            <select id="assignee" name="assignee_id" required>
+              {% for tech in a.technicians %}
+              {% set specs = tech.specialty_list() %}
+              <option value="{{ tech.id }}" {% if tech.id == ticket.assignee_id %}selected{% endif %}>
+                {{ tech.name }} ({{ tech.role | upper }}){% if specs %} - {{ specs | join(", ") }}{% else %} - generalist{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <label for="re-note">Note (optional)</label>
+            <textarea id="re-note" name="note" maxlength="1000"></textarea>
+            <button type="submit" style="margin-top:10px;">Reassign</button>
+          </form>
+        </details>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if a.can_rate or a.can_reopen %}
+    <div class="card">
+      <h2>Was your problem solved?</h2>
+      {% if a.can_rate %}
+      <div class="panel">
+        <strong>Rate the support you received</strong>
+        <form method="post" action="{{ url_for('workflow.rate', ticket_id=ticket.id) }}">
+          <label for="rating">Rating</label>
+          <select id="rating" name="rating" required>
+            <option value="">Choose...</option>
+            <option value="5">5 - Excellent</option>
+            <option value="4">4 - Good</option>
+            <option value="3">3 - Okay</option>
+            <option value="2">2 - Poor</option>
+            <option value="1">1 - Very poor</option>
+          </select>
+          <label for="rate-note">Comment (optional)</label>
+          <textarea id="rate-note" name="note" maxlength="500"></textarea>
+          <button type="submit" style="margin-top:10px;">Submit rating</button>
+        </form>
+      </div>
+      {% endif %}
+      {% if a.can_reopen %}
+      <div class="panel">
+        <details>
+          <summary>Not fixed? Reopen this ticket</summary>
+          <form method="post" action="{{ url_for('workflow.reopen', ticket_id=ticket.id) }}">
+            <label for="reopen-note">What is still wrong?</label>
+            <textarea id="reopen-note" name="note" maxlength="1000" required></textarea>
+            <button type="submit" style="margin-top:10px;">Reopen ticket</button>
+          </form>
+        </details>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if ticket.rating %}
+    <div class="card">
+      <h2>Customer feedback</h2>
+      <div class="stars">{{ "★" * ticket.rating }}{{ "☆" * (5 - ticket.rating) }}</div>
+      <div>{{ ticket.rating }}/5</div>
+      {% if ticket.rating_comment %}<p class="muted" style="margin-bottom:0;">{{ ticket.rating_comment }}</p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if ticket.article %}
+    <div class="card">
+      <h2>Related knowledge</h2>
+      <strong>{{ ticket.article.title }}</strong>
+      <div class="muted">{{ ticket.article.category }}</div>
+      {% if g.user.role == "admin" %}
+      <p style="margin-bottom:0;"><a href="{{ url_for('kb.article_edit', article_id=ticket.article.id) }}">Open article</a></p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </aside>
 </div>
 {% endblock %}
