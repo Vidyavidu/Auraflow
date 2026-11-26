@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Analytics - Auraflow{% endblock %}
+
+{% macro bar_chart(bars, empty_text="No data yet.") %}
+  {% if bars | selectattr("count") | list %}
+    {% for b in bars %}
+    <div class="bar-row">
+      <span class="bar-label">{{ b.label }}</span>
+      <div class="track"><div class="fill {{ b.key }}" style="width: {{ b.pct }}%;"></div></div>
+      <span class="num">{{ b.count }}</span>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted">{{ empty_text }}</p>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+{% include "_ticket_styles.html" %}
+<style>
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+           gap: 12px; margin: 8px 0 24px; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .stat .value { font-size: 1.7rem; font-weight: 700; line-height: 1.2; }
+  .stat .name { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .4px; }
+  .stat .sub { color: var(--muted); font-size: .8rem; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .chart { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  .chart h2 { margin: 0 0 10px; font-size: 1.05rem; }
+  .bar-row { display: grid; grid-template-columns: 120px 1fr 36px; gap: 10px;
+             align-items: center; margin: 9px 0; font-size: .9rem; }
+  .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track { background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+           height: 16px; overflow: hidden; }
+  .fill { height: 100%; background: var(--accent); border-radius: 999px; }
+  .fill.critical { background: var(--error-text); }
+  .fill.high { background: var(--warn-text); }
+  .fill.medium { background: var(--accent); }
+  .fill.low { background: var(--ok-text); }
+  .num { text-align: right; font-weight: 700; }
+  .section { margin-top: 24px; }
+  .section h2 { font-size: 1.1rem; margin: 0 0 10px; }
+</style>
+
+<div class="card">
+  <div class="topbar">
+    <h1>Analytics</h1>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('admin.users') }}">Manage users</a>
+      <a class="btn" href="{{ url_for('workflow.queue') }}">Work queue</a>
+      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="name">Total tickets</div><div class="value">{{ s.total }}</div></div>
+    <div class="stat"><div class="name">Open</div><div class="value">{{ s.open }}</div></div>
+    <div class="stat"><div class="name">Overdue</div><div class="value">{{ s.overdue }}</div></div>
+    <div class="stat"><div class="name">Unassigned</div><div class="value">{{ s.unassigned }}</div></div>
+    <div class="stat">
+      <div class="name">SLA met</div>
+      <div class="value">{% if s.sla_compliance is not none %}{{ s.sla_compliance }}%{% else %}-{% endif %}</div>
+      <div class="sub">of {{ s.resolved_total }} resolved</div>
+    </div>
+    <div class="stat">
+      <div class="name">Avg resolution</div>
+      <div class="value">{% if s.avg_hours is not none %}{{ s.avg_hours }}h{% else %}-{% endif %}</div>
+    </div>
+    <div class="stat">
+      <div class="name">Avg rating</div>
+      <div class="value">{% if s.avg_rating is not none %}{{ s.avg_rating }}/5{% else %}-{% endif %}</div>
+      <div class="sub">{{ s.rated_count }} rating(s)</div>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="chart"><h2>Tickets by urgency</h2>{{ bar_chart(s.by_urgency) }}</div>
+    <div class="chart"><h2>Tickets by status</h2>{{ bar_chart(s.by_status) }}</div>
+    <div class="chart"><h2>Tickets by category</h2>{{ bar_chart(s.by_category) }}</div>
+    <div class="chart"><h2>Raised in the last 7 days</h2>{{ bar_chart(s.last7, "No tickets raised this week.") }}</div>
+    <div class="chart"><h2>Employee ratings</h2>{{ bar_chart(s.ratings, "No ratings yet.") }}</div>
+  </div>
+
+  <div class="section">
+    <h2>Technicians</h2>
+    {% if s.techs %}
+    <div class="scroll-x">
+      <table class="tickets">
+        <thead>
+          <tr><th>Name</th><th>Level</th><th>Open now</th><th>Solved</th><th>Avg rating</th></tr>
+        </thead>
+        <tbody>
+          {% for t in s.techs %}
+          <tr>
+            <td>{{ t.name }}</td>
+            <td>{{ t.role }}</td>
+            <td>{{ t.open }}</td>
+            <td>{{ t.solved }}</td>
+            <td>{% if t.rating is not none %}{{ t.rating }}/5 ({{ t.rated }}){% else %}-{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">No active technicians.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

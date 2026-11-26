@@ -3,6 +3,7 @@ from datetime import timedelta, timezone
 from flask import Flask, g, jsonify, redirect, render_template, url_for
 from sqlalchemy import text
 
+from admin import admin_bp
 from auth import auth_bp, login_required, role_required
 from chat import chat_bp
 from config import Config
@@ -19,6 +20,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(chat_bp)
 app.register_blueprint(tickets_bp)
 app.register_blueprint(workflow_bp)
+app.register_blueprint(admin_bp)
 
 ROLE_LABELS = {
     "employee": "Employee",

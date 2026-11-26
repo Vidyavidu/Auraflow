@@ -14,6 +14,10 @@
   {% endif %}
 
   <p style="display:flex; gap:10px; flex-wrap:wrap;">
+    {% if g.user.role == "admin" %}
+    <a class="btn" href="{{ url_for('admin.analytics') }}">Analytics</a>
+    <a class="btn" href="{{ url_for('admin.users') }}">Manage users</a>
+    {% endif %}
     {% if counts %}
     <a class="btn" href="{{ url_for('workflow.queue') }}">Work queue</a>
     {% endif %}
@@ -23,7 +27,7 @@
   </p>
 
   {% if g.user.role == "admin" %}
-    <p>Soon: charts, SLA overview, user management and the knowledge-base editor.</p>
+    <p class="muted">Soon: the knowledge-base editor.</p>
   {% endif %}
 </div>
 {% endblock %}

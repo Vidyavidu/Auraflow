@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Users - Auraflow{% endblock %}
+{% block content %}
+{% include "_ticket_styles.html" %}
+<style>
+  .inline { display: flex; gap: 6px; align-items: center; }
+  .inline select { width: auto; padding: 6px 8px; font-size: .9rem; }
+  .inline button { padding: 6px 12px; font-size: .88rem; }
+  .you { color: var(--muted); font-style: italic; }
+</style>
+<div class="card">
+  <div class="topbar">
+    <h1>Users</h1>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('admin.analytics') }}">Analytics</a>
+      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <p class="muted">
+    Staff can register as Employees, then you promote them here. New accounts with a
+    password are created with <code>create_user.py</code>, and forgotten passwords are
+    reset with <code>reset_password.py</code>. Role changes apply on the person's next click.
+  </p>
+
+  <div class="scroll-x">
+    <table class="tickets">
+      <thead>
+        <tr>
+          <th>Name</th><th>Email</th><th>Role</th><th>Status</th>
+          <th>Open tickets</th><th>Joined</th><th>Change role</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u, open_count in rows %}
+        <tr>
+          <td>{{ u.name }}</td>
+          <td>{{ u.email }}</td>
+          <td><span class="pill">{{ u.role | upper }}</span></td>
+          <td>
+            {% if u.is_active %}<span class="pill on_track">Active</span>
+            {% else %}<span class="pill breached">Deactivated</span>{% endif %}
+          </td>
+          <td>{{ open_count }}</td>
+          <td>{{ u.created_at | local_time }}</td>
+          {% if u.id == g.user.id %}
+          <td colspan="2" class="you">This is you</td>
+          {% else %}
+          <td>
+            <form class="inline" method="post" action="{{ url_for('admin.change_role', user_id=u.id) }}">
+              <select name="role" aria-label="Role for {{ u.name }}">
+                {% for r in roles %}
+                <option value="{{ r }}" {% if r == u.role %}selected{% endif %}>{{ r | upper }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit">Save</button>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('admin.toggle_active', user_id=u.id) }}"
+                  onsubmit="return confirm('{{ 'Deactivate' if u.is_active else 'Reactivate' }} {{ u.name | e }}?');">
+              <button class="ghost" type="submit"
+                      style="color: var(--text); border-color: var(--muted); padding: 6px 12px; font-size: .88rem;">
+                {{ "Deactivate" if u.is_active else "Reactivate" }}
+              </button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
