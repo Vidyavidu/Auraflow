@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.number }} - Auraflow{% endblock %}
+{% block content %}
+{% include "_ticket_styles.html" %}
+{% set a = ticket_actions(ticket) %}
+<style>
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+          gap: 14px 24px; margin: 18px 0; }
+  .grid dt { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .4px; }
+  .grid dd { margin: 2px 0 0; font-weight: 600; }
+  .desc { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border);
+          border-radius: 10px; padding: 12px 14px; }
+  .timeline { list-style: none; padding: 0; margin: 0; }
+  .timeline li { border-left: 3px solid var(--accent); padding: 4px 0 14px 14px; margin-left: 6px; }
+  .timeline .when { color: var(--muted); font-size: .82rem; }
+  .timeline .kind { font-size: .72rem; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: .4px; color: var(--muted); display: block; }
+  .timeline .note { white-space: pre-wrap; }
+  h2 { font-size: 1.1rem; margin: 24px 0 8px; }
+  .panel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+           padding: 14px 16px; margin-bottom: 12px; }
+  .panel details summary { cursor: pointer; font-weight: 600; }
+  .panel form { margin-top: 10px; }
+  .panel textarea { min-height: 80px; }
+  .panel label { margin-top: 10px; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .stars { font-size: 1.1rem; letter-spacing: 2px; }
+</style>
+<div class="card">
+  <div class="topbar">
+    <h1>{{ ticket.number }}</h1>
+    <div class="actions">
+      {% if g.user.role in ("l1", "l2", "admin") %}
+      <a class="btn" href="{{ url_for('workflow.queue') }}">Work queue</a>
+      {% endif %}
+      <a class="btn" href="{{ url_for('tickets.ticket_list') }}">All tickets</a>
+      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <p style="font-size:1.1rem; margin-top:0;"><strong>{{ ticket.title }}</strong></p>
+  <p>
+    <span class="pill {{ ticket.urgency }}">{{ ticket.urgency | upper }}</span>
+    <span class="pill">{{ ticket.status | replace("_", " ") | title }}</span>
+    <span class="pill {{ sla.state }}">{{ sla.label }}</span>
+  </p>
+
+  <dl class="grid">
+    <div><dt>Category</dt><dd>{{ ticket.category }}</dd></div>
+    <div><dt>Requested by</dt><dd>{{ ticket.requester.name }}</dd></div>
+    <div><dt>Assigned to</dt><dd>{{ ticket.assignee.name if ticket.assignee else "Unassigned (waiting for a technician)" }}</dd></div>
+    <div><dt>Support level</dt><dd>L{{ ticket.level }}</dd></div>
+    <div><dt>Created</dt><dd>{{ ticket.created_at | local_time }}</dd></div>
+    <div><dt>SLA due</dt><dd>{{ ticket.sla_due_at | local_time }}</dd></div>
+    {% if ticket.resolved_at %}
+    <div><dt>Resolved</dt><dd>{{ ticket.resolved_at | local_time }}</dd></div>
+    {% endif %}
+    {% if ticket.rating %}
+    <div><dt>Employee rating</dt>
+      <dd><span class="stars">{{ "★" * ticket.rating }}{{ "☆" * (5 - ticket.rating) }}</span> {{ ticket.rating }}/5</dd></div>
+    {% endif %}
+  </dl>
+
+  <h2>Description</h2>
+  <div class="desc">{{ ticket.description }}</div>
+
+  {% if a.can_start or a.can_resolve or a.can_escalate or a.can_reassign %}
+  <h2>Technician actions</h2>
+
+  {% if a.can_start %}
+  <div class="panel">
+    <form method="post" action="{{ url_for('workflow.start', ticket_id=ticket.id) }}" style="margin-top:0;">
+      <button type="submit">Start working</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if a.can_resolve %}
+  <div class="panel">
+    <details>
+      <summary>Resolve ticket</summary>
+      <form method="post" action="{{ url_for('workflow.resolve', ticket_id=ticket.id) }}">
+        <label for="resolve-note">What fixed it?</label>
+        <textarea id="resolve-note" name="note" maxlength="1000" required></textarea>
+        <button type="submit" style="margin-top:10px;">Mark as resolved</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+
+  {% if a.can_escalate %}
+  <div class="panel">
+    <details>
+      <summary>Escalate to L2</summary>
+      <form method="post" action="{{ url_for('workflow.escalate', ticket_id=ticket.id) }}">
+        <label for="esc-note">Why does this need L2? What have you tried?</label>
+        <textarea id="esc-note" name="note" maxlength="1000" required></textarea>
+        <button type="submit" style="margin-top:10px;">Escalate</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+
+  {% if a.can_reassign %}
+  <div class="panel">
+    <details>
+      <summary>Reassign</summary>
+      <form method="post" action="{{ url_for('workflow.reassign', ticket_id=ticket.id) }}">
+        <label for="assignee">Technician</label>
+        <select id="assignee" name="assignee_id" required>
+          {% for tech in a.technicians %}
+          <option value="{{ tech.id }}" {% if tech.id == ticket.assignee_id %}selected{% endif %}>
+            {{ tech.name }} ({{ tech.role | upper }})
+          </option>
+          {% endfor %}
+        </select>
+        <label for="re-note">Note (optional)</label>
+        <textarea id="re-note" name="note" maxlength="1000"></textarea>
+        <button type="submit" style="margin-top:10px;">Reassign</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {% if a.can_rate or a.can_reopen %}
+  <h2>Was your problem solved?</h2>
+  {% if a.can_rate %}
+  <div class="panel">
+    <strong>Rate the support you received</strong>
+    <form method="post" action="{{ url_for('workflow.rate', ticket_id=ticket.id) }}">
+      <label for="rating">Rating</label>
+      <select id="rating" name="rating" required>
+        <option value="">Choose...</option>
+        <option value="5">5 - Excellent</option>
+        <option value="4">4 - Good</option>
+        <option value="3">3 - Okay</option>
+        <option value="2">2 - Poor</option>
+        <option value="1">1 - Very poor</option>
+      </select>
+      <label for="rate-note">Comment (optional)</label>
+      <textarea id="rate-note" name="note" maxlength="500"></textarea>
+      <button type="submit" style="margin-top:10px;">Submit rating</button>
+    </form>
+  </div>
+  {% endif %}
+  {% if a.can_reopen %}
+  <div class="panel">
+    <details>
+      <summary>Not fixed? Reopen this ticket</summary>
+      <form method="post" action="{{ url_for('workflow.reopen', ticket_id=ticket.id) }}">
+        <label for="reopen-note">What is still wrong?</label>
+        <textarea id="reopen-note" name="note" maxlength="1000" required></textarea>
+        <button type="submit" style="margin-top:10px;">Reopen ticket</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <h2>Add a comment</h2>
+  <div class="panel">
+    <form method="post" action="{{ url_for('workflow.comment', ticket_id=ticket.id) }}" style="margin-top:0;">
+      <textarea name="note" maxlength="1000" placeholder="Write an update or question..." required></textarea>
+      <button type="submit" style="margin-top:10px;">Post comment</button>
+    </form>
+  </div>
+
+  <h2>History</h2>
+  <ul class="timeline">
+    {% for u in ticket.updates %}
+    <li>
+      <span class="kind">{{ u.kind | replace("_", " ") }}</span>
+      <div class="note">{{ u.note }}</div>
+      <div class="when">{{ u.created_at | local_time }}{% if u.author %} &middot; {{ u.author.name }}{% else %} &middot; Auraflow{% endif %}</div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

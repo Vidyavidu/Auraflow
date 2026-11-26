@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Raise a ticket - Auraflow{% endblock %}
+{% block content %}
+{% include "_ticket_styles.html" %}
+<div class="card narrow" style="max-width: 640px;">
+  <h1>Raise a ticket</h1>
+  <p class="muted">Tried the <a href="{{ url_for('chat.chat_page') }}">assistant</a> first? It can fix many problems instantly.
+  Mention words like "urgent" or "everyone affected" if they apply, and Auraflow will set the priority.</p>
+
+  <form method="post" action="{{ url_for('tickets.ticket_new') }}">
+    <label for="title">Short title</label>
+    <input id="title" name="title" type="text" maxlength="200" value="{{ title }}" required autofocus>
+
+    <label for="category">Category</label>
+    <select id="category" name="category">
+      {% for c in categories %}
+      <option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+
+    <label for="description">What is happening?</label>
+    <textarea id="description" name="description" maxlength="2000" required>{{ description }}</textarea>
+
+    <button class="full" type="submit">Create ticket</button>
+  </form>
+  <p class="small muted"><a href="{{ url_for('tickets.ticket_list') }}">Back to tickets</a></p>
+</div>
+{% endblock %}

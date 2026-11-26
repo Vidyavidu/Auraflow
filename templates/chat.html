@@ -17,8 +17,9 @@
               background: var(--info-bg); color: var(--info-text); font-size: .95rem; }
   .solution .meta { display: block; font-size: .78rem; opacity: .8; margin-bottom: 6px; font-weight: 600; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .chip { background: transparent; color: var(--text); border: 1px solid var(--accent);
-          border-radius: 999px; padding: 6px 12px; font-size: .88rem; font-weight: 500; }
+  .chip { display: inline-block; background: transparent; color: var(--text);
+          border: 1px solid var(--accent); border-radius: 999px; padding: 6px 12px;
+          font-size: .88rem; font-weight: 500; text-decoration: none; }
   .chip:hover { background: var(--accent); color: #171F22; filter: none; }
   .chip[disabled] { opacity: .5; cursor: default; }
   .composer { display: flex; gap: 10px; }
@@ -63,6 +64,7 @@
     return row;
   }
 
+  // onClick may be async. Returning false re-enables the chips (for failures).
   function addChips(row, items, onClick) {
     const wrap = document.createElement("div");
     wrap.className = "chips";
@@ -71,16 +73,53 @@
       chip.type = "button";
       chip.className = "chip";
       chip.textContent = item.label;
-      chip.addEventListener("click", function () {
-        wrap.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
-        onClick(item);
+      chip.addEventListener("click", async function () {
+        const buttons = wrap.querySelectorAll("button");
+        buttons.forEach(function (b) { b.disabled = true; });
+        const ok = await onClick(item);
+        if (ok === false) {
+          buttons.forEach(function (b) { b.disabled = false; });
+        }
       });
       wrap.appendChild(chip);
     });
     row.appendChild(wrap);
   }
 
-  function renderBot(data) {
+  async function raiseTicket(payload) {
+    const typing = addBubble("bot", "Raising your ticket\u2026");
+    typing.firstChild.classList.add("typing");
+    try {
+      const res = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      typing.remove();
+      if (!res.ok) {
+        addBubble("bot", data.error || "I could not raise the ticket. Please try again.");
+        return false;
+      }
+      const row = addBubble("bot", data.message);
+      const wrap = document.createElement("div");
+      wrap.className = "chips";
+      const link = document.createElement("a");
+      link.className = "chip";
+      link.href = data.url;
+      link.textContent = "View ticket " + data.number;
+      wrap.appendChild(link);
+      row.appendChild(wrap);
+      scrollDown();
+      return true;
+    } catch (err) {
+      typing.remove();
+      addBubble("bot", "I could not reach the server. Please refresh the page and try again.");
+      return false;
+    }
+  }
+
+  function renderBot(data, userText) {
     const row = addBubble("bot", data.reply);
 
     if (data.article) {
@@ -99,9 +138,9 @@
       ], function (item) {
         if (item.value === "yes") {
           addBubble("bot", "Glad that helped! Message me if anything else comes up.");
-        } else {
-          addBubble("bot", "Sorry about that. Raising a ticket straight from this chat is coming in the next step.");
+          return true;
         }
+        return raiseTicket({ description: userText, article_id: data.article.id });
       });
     }
 
@@ -109,6 +148,15 @@
       addChips(row, data.suggestions.map(function (s) {
         return { label: s.title };
       }), function (item) { send(item.label); });
+    }
+
+    // No match found: let the user escalate to a ticket instead
+    if (!data.article && data.suggestions && data.suggestions.length) {
+      addChips(row, [
+        { label: "\ud83c\udfab Raise a ticket instead" }
+      ], function () {
+        return raiseTicket({ description: userText });
+      });
     }
     scrollDown();
   }
@@ -130,7 +178,7 @@
       if (!res.ok) {
         addBubble("bot", data.error || "Something went wrong. Please try again.");
       } else {
-        renderBot(data);
+        renderBot(data, text);
       }
     } catch (err) {
       typing.remove();

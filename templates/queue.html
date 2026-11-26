@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Work queue - Auraflow{% endblock %}
+
+{% macro ticket_table(rows, claim=False) %}
+<div class="scroll-x">
+  <table class="tickets">
+    <thead>
+      <tr>
+        <th>Number</th><th>Title</th><th>Urgency</th><th>Status</th>
+        <th>SLA</th><th>Requested by</th><th>Assigned to</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t, sla in rows %}
+      <tr>
+        <td>
+          {% if claim %}{{ t.number }}
+          {% else %}<a href="{{ url_for('tickets.ticket_detail', ticket_id=t.id) }}">{{ t.number }}</a>{% endif %}
+        </td>
+        <td>{{ t.title }}</td>
+        <td><span class="pill {{ t.urgency }}">{{ t.urgency | upper }}</span></td>
+        <td><span class="pill">{{ t.status | replace("_", " ") | title }}</span></td>
+        <td><span class="pill {{ sla.state }}">{{ sla.label }}</span></td>
+        <td>{{ t.requester.name }}</td>
+        <td>{{ t.assignee.name if t.assignee else "Unassigned" }}</td>
+        <td>
+          {% if claim %}
+          <form method="post" action="{{ url_for('workflow.claim', ticket_id=t.id) }}">
+            <button type="submit">Claim</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{% block content %}
+{% include "_ticket_styles.html" %}
+<style>
+  h2.sec { font-size: 1.1rem; margin: 28px 0 10px; }
+  h2.sec:first-of-type { margin-top: 8px; }
+</style>
+<div class="card">
+  <div class="topbar">
+    <h1>Work queue</h1>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('tickets.ticket_list') }}">All my tickets</a>
+      <a class="btn" href="{{ url_for('dashboard') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <h2 class="sec">Assigned to me ({{ mine | length }})</h2>
+  {% if mine %}{{ ticket_table(mine) }}
+  {% else %}<p class="muted">Nothing assigned to you right now.</p>{% endif %}
+
+  <h2 class="sec">Waiting for a technician ({{ unassigned | length }})</h2>
+  {% if unassigned %}{{ ticket_table(unassigned, claim=True) }}
+  {% else %}<p class="muted">No unassigned tickets.</p>{% endif %}
+
+  {% if g.user.role in ("l2", "admin") %}
+  <h2 class="sec">Other open tickets ({{ others | length }})</h2>
+  {% if others %}{{ ticket_table(others) }}
+  {% else %}<p class="muted">No other open tickets.</p>{% endif %}
+  {% endif %}
+</div>
+{% endblock %}

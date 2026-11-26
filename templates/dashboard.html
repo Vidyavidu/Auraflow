@@ -5,16 +5,25 @@
   <h1>Hello, {{ g.user.name }}</h1>
   <p class="muted">You are signed in as <strong>{{ role_label }}</strong>.</p>
 
-  <p><a class="btn" href="{{ url_for('chat.chat_page') }}">Open the assistant</a></p>
+  {% if counts %}
+  <p>
+    <strong>{{ counts.mine }}</strong> open in your queue &middot;
+    <strong>{{ counts.unassigned }}</strong> waiting for a technician &middot;
+    <strong>{{ counts.overdue }}</strong> overdue
+  </p>
+  {% endif %}
 
-  {% if g.user.role == "employee" %}
-    <p>Soon: track your tickets here.</p>
-  {% elif g.user.role == "l1" %}
-    <p>Soon: your L1 queue of assigned tickets will appear here.</p>
-  {% elif g.user.role == "l2" %}
-    <p>Soon: your L2 queue and escalated tickets will appear here.</p>
-  {% elif g.user.role == "admin" %}
-    <p>Soon: charts, SLA overview, user management and the knowledge-base editor will appear here.</p>
+  <p style="display:flex; gap:10px; flex-wrap:wrap;">
+    {% if counts %}
+    <a class="btn" href="{{ url_for('workflow.queue') }}">Work queue</a>
+    {% endif %}
+    <a class="btn" href="{{ url_for('chat.chat_page') }}">Open the assistant</a>
+    <a class="btn" href="{{ url_for('tickets.ticket_new') }}">Raise a ticket</a>
+    <a class="btn" href="{{ url_for('tickets.ticket_list') }}">Tickets ({{ open_count }} open of mine)</a>
+  </p>
+
+  {% if g.user.role == "admin" %}
+    <p>Soon: charts, SLA overview, user management and the knowledge-base editor.</p>
   {% endif %}
 </div>
 {% endblock %}
